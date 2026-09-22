@@ -120,9 +120,9 @@ export default async function PrintBudgetPage({
                 <tr key={item.id} className="border-t border-border">
                   <td className="px-3 py-2">{item.procedureName}</td>
                   <td className="px-3 py-2 text-center">{item.quantity}</td>
-                  <td className="px-3 py-2 text-right">{formatCurrency(item.unitPrice)}</td>
-                  <td className="px-3 py-2 text-right">{formatCurrency(item.discount)}</td>
-                  <td className="px-3 py-2 text-right font-medium">{formatCurrency(item.total)}</td>
+                 <td className="px-3 py-2 text-right">{formatCurrency(Number(item.unitPrice))}</td>
+<td className="px-3 py-2 text-right">{formatCurrency(Number(item.discount))}</td>
+<td className="px-3 py-2 text-right font-medium">{formatCurrency(Number(item.total))}</td>
                 </tr>
               ))}
             </tbody>
