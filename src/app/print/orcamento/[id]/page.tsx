@@ -122,7 +122,7 @@ export default async function PrintBudgetPage({
                   <td className="px-3 py-2 text-center">{item.quantity}</td>
                  <td className="px-3 py-2 text-right">{formatCurrency(Number(item.unitPrice))}</td>
 <td className="px-3 py-2 text-right">{formatCurrency(Number(item.discount))}</td>
-<td className="px-3 py-2 text-right font-medium">{formatCurrency(Number(item.total))}</td>
+<td className="px-3 py-2 text-right font-medium">{formatCurrency(Number(item.total))}</td>git add .
                 </tr>
               ))}
             </tbody>
