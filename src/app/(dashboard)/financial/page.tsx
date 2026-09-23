@@ -4,14 +4,14 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Plus } from "lucide-react";
 
-type Installment = { id: string; number: number; amount: string; dueDate: string; status: string };
 type Receivable = {
   id: string;
   description: string;
   totalAmount: string;
+  totalCommission: number;
+  netAmount: number;
   status: string;
   patient: { id: string; name: string };
-  installments: Installment[];
 };
 type Payable = {
   id: string;
@@ -25,7 +25,7 @@ type Payable = {
 const RECEIVABLE_STATUS_LABELS: Record<string, string> = {
   pending: "Pendente",
   partially_paid: "Parcialmente pago",
-  paid: "Pago",
+  paid: "Recebido",
   canceled: "Cancelado",
 };
 
@@ -54,33 +54,28 @@ export default function FinancialPage() {
     setLoading(false);
   }
 
-  const totalToReceive = receivables
-    .flatMap((r) => r.installments)
-    .filter((i) => i.status !== "paid")
-    .reduce((sum, i) => sum + Number(i.amount), 0);
-
-  const totalReceivedThisMonth = receivables
-    .flatMap((r) => r.installments)
-    .filter((i) => i.status === "paid")
-    .reduce((sum, i) => sum + Number(i.amount), 0);
-
-  const totalToPay = payables
-    .filter((p) => p.status === "pending")
-    .reduce((sum, p) => sum + Number(p.amount), 0);
+  const totalGross = receivables.reduce((sum, r) => sum + Number(r.totalAmount), 0);
+  const totalCommissions = receivables.reduce((sum, r) => sum + r.totalCommission, 0);
+  const totalNet = receivables.reduce((sum, r) => sum + r.netAmount, 0);
+  const totalToPay = payables.filter((p) => p.status === "pending").reduce((sum, p) => sum + Number(p.amount), 0);
 
   return (
     <div className="p-8 max-w-5xl">
       <h1 className="font-display text-2xl text-ink mb-1">Financeiro</h1>
-      <p className="text-sm text-ink-muted mb-6">Contas a receber, contas a pagar e fluxo de caixa</p>
+      <p className="text-sm text-ink-muted mb-6">Recebimentos, comissões e contas a pagar</p>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-8">
         <div className="bg-white border border-border rounded p-5">
-          <p className="text-sm text-ink-muted">A receber</p>
-          <p className="font-display text-2xl text-ink mt-1">{formatCurrency(totalToReceive)}</p>
+          <p className="text-sm text-ink-muted">Recebido (bruto)</p>
+          <p className="font-display text-2xl text-ink mt-1">{formatCurrency(totalGross)}</p>
         </div>
         <div className="bg-white border border-border rounded p-5">
-          <p className="text-sm text-ink-muted">Recebido (parcelas pagas)</p>
-          <p className="font-display text-2xl text-primary-dark mt-1">{formatCurrency(totalReceivedThisMonth)}</p>
+          <p className="text-sm text-ink-muted">Comissões</p>
+          <p className="font-display text-2xl text-alert mt-1">{formatCurrency(totalCommissions)}</p>
+        </div>
+        <div className="bg-white border border-border rounded p-5">
+          <p className="text-sm text-ink-muted">Líquido da clínica</p>
+          <p className="font-display text-2xl text-primary-dark mt-1">{formatCurrency(totalNet)}</p>
         </div>
         <div className="bg-white border border-border rounded p-5">
           <p className="text-sm text-ink-muted">A pagar</p>
@@ -93,7 +88,7 @@ export default function FinancialPage() {
           onClick={() => setTab("receivables")}
           className={`pb-2 border-b-2 ${tab === "receivables" ? "border-primary text-primary font-medium" : "border-transparent text-ink-muted"}`}
         >
-          Contas a receber
+          Recebimentos
         </button>
         <button
           onClick={() => setTab("payables")}
@@ -112,25 +107,35 @@ export default function FinancialPage() {
               <tr>
                 <th className="px-4 py-3 font-medium">Paciente</th>
                 <th className="px-4 py-3 font-medium">Descrição</th>
-                <th className="px-4 py-3 font-medium">Total</th>
+                <th className="px-4 py-3 font-medium text-right">Bruto</th>
+                <th className="px-4 py-3 font-medium text-right">Comissão</th>
+                <th className="px-4 py-3 font-medium text-right">Líquido</th>
                 <th className="px-4 py-3 font-medium">Status</th>
               </tr>
             </thead>
             <tbody>
               {receivables.length === 0 && (
-                <tr><td colSpan={4} className="px-4 py-8 text-center text-ink-muted">Nenhuma conta a receber ainda.</td></tr>
+                <tr><td colSpan={6} className="px-4 py-8 text-center text-ink-muted">Nenhum recebimento ainda.</td></tr>
               )}
               {receivables.map((r) => (
                 <tr key={r.id} className="border-t border-border">
                   <td className="px-4 py-3">
-                    <Link href={`/patients/${r.patient.id}/orcamentos`} className="text-primary hover:underline font-medium">
+                    <Link href={`/patients/${r.patient.id}`} className="text-primary hover:underline font-medium">
                       {r.patient.name}
                     </Link>
                   </td>
                   <td className="px-4 py-3 text-ink-muted">{r.description}</td>
-                  <td className="px-4 py-3 text-ink-muted">{formatCurrency(r.totalAmount)}</td>
+                  <td className="px-4 py-3 text-right text-ink-muted">{formatCurrency(r.totalAmount)}</td>
+                  <td className="px-4 py-3 text-right text-alert">
+                    {r.totalCommission > 0 ? `- ${formatCurrency(r.totalCommission)}` : "—"}
+                  </td>
+                  <td className="px-4 py-3 text-right text-ink font-medium">{formatCurrency(r.netAmount)}</td>
                   <td className="px-4 py-3">
-                    <span className="text-xs text-ink-muted bg-surface px-2 py-1 rounded">
+                    <span
+                      className={`text-xs px-2 py-1 rounded ${
+                        r.status === "paid" ? "bg-primary-light/15 text-primary-dark" : "bg-surface text-ink-muted"
+                      }`}
+                    >
                       {RECEIVABLE_STATUS_LABELS[r.status]}
                     </span>
                   </td>

@@ -1,6 +1,6 @@
 import { getServerSession } from "next-auth";
 import Link from "next/link";
-import { CalendarClock, Wallet, Users, FileWarning, Bell } from "lucide-react";
+import { CalendarClock, Wallet, Users, TrendingDown, Bell } from "lucide-react";
 import { authOptions } from "@/lib/auth";
 import { withTenantContext } from "@/lib/tenant-context";
 
@@ -21,39 +21,53 @@ export default async function DashboardPage() {
   const { recentPatients, upcomingAppointments, kpis } = await withTenantContext(
     user.organizationId,
     async (tx) => {
-      const [recentPatients, upcomingAppointments, appointmentsToday, newPatientsThisMonth, paidThisMonth, pendingInstallments] =
-        await Promise.all([
-          tx.patient.findMany({
-            where: { organizationId: user.organizationId, active: true },
-            orderBy: { createdAt: "desc" },
-            take: 5,
-            select: { id: true, name: true, phone: true, whatsapp: true },
-          }),
-          tx.appointment.findMany({
-            where: {
-              organizationId: user.organizationId,
-              startsAt: { gte: now, lte: dayEnd },
-              status: { notIn: ["cancelada", "faltou"] },
-            },
-            orderBy: { startsAt: "asc" },
-            take: 5,
-            include: { patient: { select: { name: true } } },
-          }),
-          tx.appointment.count({
-            where: { organizationId: user.organizationId, startsAt: { gte: dayStart, lte: dayEnd } },
-          }),
-          tx.patient.count({
-            where: { organizationId: user.organizationId, createdAt: { gte: monthStart } },
-          }),
-          tx.receivableInstallment.findMany({
-            where: { organizationId: user.organizationId, status: "paid", paidAt: { gte: monthStart } },
-            select: { amount: true },
-          }),
-          tx.receivableInstallment.findMany({
-            where: { organizationId: user.organizationId, status: { in: ["pending", "overdue"] } },
-            select: { amount: true },
-          }),
-        ]);
+      const [
+        recentPatients,
+        upcomingAppointments,
+        appointmentsToday,
+        newPatientsThisMonth,
+        paidThisMonth,
+        paidToday,
+        commissionsToday,
+      ] = await Promise.all([
+        tx.patient.findMany({
+          where: { organizationId: user.organizationId, active: true },
+          orderBy: { createdAt: "desc" },
+          take: 5,
+          select: { id: true, name: true, phone: true, whatsapp: true },
+        }),
+        tx.appointment.findMany({
+          where: {
+            organizationId: user.organizationId,
+            startsAt: { gte: now, lte: dayEnd },
+            status: { notIn: ["cancelada", "faltou"] },
+          },
+          orderBy: { startsAt: "asc" },
+          take: 5,
+          include: { patient: { select: { name: true } } },
+        }),
+        tx.appointment.count({
+          where: { organizationId: user.organizationId, startsAt: { gte: dayStart, lte: dayEnd } },
+        }),
+        tx.patient.count({
+          where: { organizationId: user.organizationId, createdAt: { gte: monthStart } },
+        }),
+        tx.receivableInstallment.findMany({
+          where: { organizationId: user.organizationId, status: "paid", paidAt: { gte: monthStart } },
+          select: { amount: true },
+        }),
+        tx.receivableInstallment.findMany({
+          where: { organizationId: user.organizationId, status: "paid", paidAt: { gte: dayStart, lte: dayEnd } },
+          select: { amount: true },
+        }),
+        tx.commissionEntry.findMany({
+          where: { organizationId: user.organizationId, createdAt: { gte: dayStart, lte: dayEnd } },
+          select: { amount: true },
+        }),
+      ]);
+
+      const todayRevenue = paidToday.reduce((sum, i) => sum + Number(i.amount), 0);
+      const todayCommissions = commissionsToday.reduce((sum, c) => sum + Number(c.amount), 0);
 
       return {
         recentPatients,
@@ -62,7 +76,9 @@ export default async function DashboardPage() {
           appointmentsToday,
           newPatientsThisMonth,
           revenueThisMonth: paidThisMonth.reduce((sum, i) => sum + Number(i.amount), 0),
-          totalReceivable: pendingInstallments.reduce((sum, i) => sum + Number(i.amount), 0),
+          todayRevenue,
+          todayCommissions,
+          todayNet: todayRevenue - todayCommissions,
         },
       };
     }
@@ -70,9 +86,9 @@ export default async function DashboardPage() {
 
   const metrics = [
     { label: "Consultas hoje", value: String(kpis.appointmentsToday), icon: CalendarClock },
+    { label: "Entrou hoje", value: formatCurrency(kpis.todayRevenue), icon: Wallet },
     { label: "Faturamento do mês", value: formatCurrency(kpis.revenueThisMonth), icon: Wallet },
     { label: "Novos pacientes no mês", value: String(kpis.newPatientsThisMonth), icon: Users },
-    { label: "Contas a receber", value: formatCurrency(kpis.totalReceivable), icon: FileWarning },
   ];
 
   return (
@@ -95,6 +111,20 @@ export default async function DashboardPage() {
             </div>
           );
         })}
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="bg-white border border-border rounded p-5">
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-ink-muted">Comissões hoje</p>
+            <TrendingDown size={16} className="text-alert/60" strokeWidth={1.75} />
+          </div>
+          <p className="font-display text-2xl text-alert mt-2">{formatCurrency(kpis.todayCommissions)}</p>
+        </div>
+        <div className="bg-white border border-border rounded p-5">
+          <p className="text-sm text-ink-muted">Líquido hoje</p>
+          <p className="font-display text-2xl text-primary-dark mt-2">{formatCurrency(kpis.todayNet)}</p>
+        </div>
       </div>
 
       <div className="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -147,10 +177,6 @@ export default async function DashboardPage() {
           )}
         </div>
       </div>
-
-      <p className="text-xs text-ink-muted/70 mt-8">
-        Gráficos e produção por profissional entram nos relatórios (próxima leva).
-      </p>
     </div>
   );
 }

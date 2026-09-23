@@ -53,16 +53,27 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       },
     });
 
-    // Ao CONCLUIR uma consulta que tem procedimento definido e ainda não
-    // tem cobrança gerada, cria automaticamente a conta a receber (1
-    // parcela, vencimento hoje, status pendente). Isso é o que faz o
-    // financeiro/relatórios/dashboard refletirem o atendimento na hora.
-    // Não gera nada se: não mudou pra "concluida" agora, não tem
-    // procedimento vinculado, ou já existe cobrança pra essa consulta
-    // (evita duplicar se o status for alternado pra frente e pra trás).
+    // ------------------------------------------------------------
+    // Ao CONCLUIR uma consulta com procedimento vinculado, o pagamento
+    // é registrado IMEDIATAMENTE como recebido — sem etapa de "conta a
+    // receber pendente" nem baixa manual depois. A clínica trabalha no
+    // regime de caixa (recebe no ato do atendimento), então:
+    //   1. cria a conta a receber já com status "paid" e a parcela já
+    //      com paidAt preenchido;
+    //   2. calcula a comissão do profissional na mesma transação,
+    //      priorizando regra específica do procedimento sobre a regra
+    //      geral do profissional.
+    // A trava `!existing.receivable` garante que isso só acontece UMA
+    // vez por consulta, mesmo que o status seja alternado várias vezes
+    // (evita comissão/recebimento duplicado).
+    // ------------------------------------------------------------
     let receivable = null;
+    let commissionEntry = null;
     const justCompleted = parsed.data.status === "concluida" && existing.status !== "concluida";
+
     if (justCompleted && existing.procedureId && existing.procedure && !existing.receivable) {
+      const paidAt = new Date();
+
       receivable = await tx.receivable.create({
         data: {
           organizationId: user.organizationId,
@@ -70,18 +81,24 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
           appointmentId: existing.id,
           description: `Atendimento concluído — ${existing.procedure.name}`,
           totalAmount: existing.procedure.defaultPrice,
+          status: "paid",
           installments: {
             create: [
               {
                 organizationId: user.organizationId,
                 number: 1,
                 amount: existing.procedure.defaultPrice,
-                dueDate: new Date(),
+                dueDate: paidAt,
+                paidAt,
+                status: "paid",
               },
             ],
           },
         },
+        include: { installments: true },
       });
+
+      const installment = receivable.installments[0];
 
       await tx.auditLog.create({
         data: {
@@ -93,9 +110,48 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
           after: receivable as any,
         },
       });
+
+      // Comissão: regra específica do procedimento tem prioridade sobre
+      // a regra geral do profissional (procedureId nulo).
+      const professionalUserId = existing.professionalUserId;
+      const procedureId = existing.procedureId;
+
+      const specificRule = await tx.commissionRule.findFirst({
+        where: { organizationId: user.organizationId, professionalUserId, procedureId },
+      });
+      const rule =
+        specificRule ??
+        (await tx.commissionRule.findFirst({
+          where: { organizationId: user.organizationId, professionalUserId, procedureId: null },
+        }));
+
+      if (rule) {
+        const amount = (Number(installment.amount) * Number(rule.percentage)) / 100;
+        commissionEntry = await tx.commissionEntry.create({
+          data: {
+            organizationId: user.organizationId,
+            professionalUserId,
+            receivableInstallmentId: installment.id,
+            procedureId,
+            percentageApplied: rule.percentage,
+            amount,
+          },
+        });
+
+        await tx.auditLog.create({
+          data: {
+            organizationId: user.organizationId,
+            userId: user.id,
+            action: "commission_entry.create",
+            entityType: "CommissionEntry",
+            entityId: commissionEntry.id,
+            after: commissionEntry as any,
+          },
+        });
+      }
     }
 
-    return { ...updated, generatedReceivable: receivable };
+    return { ...updated, generatedReceivable: receivable, generatedCommission: commissionEntry };
   });
 
   if (!appointment) return NextResponse.json({ error: "Consulta não encontrada" }, { status: 404 });

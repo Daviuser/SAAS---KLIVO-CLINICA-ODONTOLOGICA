@@ -24,11 +24,29 @@ export async function GET(req: Request) {
       },
       include: {
         patient: { select: { id: true, name: true } },
-        installments: { orderBy: { number: "asc" } },
+        installments: {
+          orderBy: { number: "asc" },
+          include: { commissionEntries: true },
+        },
       },
       orderBy: { createdAt: "desc" },
     })
   );
 
-  return NextResponse.json({ receivables });
+  // Bruto = total da cobrança; comissão = soma das comissões geradas
+  // sobre as parcelas dela; líquido = bruto - comissão. Isso é o que
+  // vai pra financeiro mostrar de forma transparente pra clínica.
+  const withNet = receivables.map((r) => {
+    const totalCommission = r.installments.reduce(
+      (sum, inst) => sum + inst.commissionEntries.reduce((s, c) => s + Number(c.amount), 0),
+      0
+    );
+    return {
+      ...r,
+      totalCommission,
+      netAmount: Number(r.totalAmount) - totalCommission,
+    };
+  });
+
+  return NextResponse.json({ receivables: withNet });
 }
