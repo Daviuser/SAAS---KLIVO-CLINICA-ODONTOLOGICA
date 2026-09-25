@@ -2,8 +2,15 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, Plus, X, Clock, User as UserIcon } from "lucide-react";
-import { TimeSlotPicker } from "@/components/ui/TimeSlotPicker";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Plus,
+  X,
+  Clock,
+  User as UserIcon,
+  CalendarX,
+} from "lucide-react";
 import { DurationPicker } from "@/components/ui/DurationPicker";
 
 type Appointment = {
@@ -41,40 +48,55 @@ const STATUS_COLORS: Record<string, string> = {
   faltou: "bg-alert/10 text-alert border-alert/25",
 };
 
-const STATUS_DOT: Record<string, string> = {
-  agendada: "bg-ink-muted",
-  confirmada: "bg-primary",
-  em_atendimento: "bg-primary-light",
-  concluida: "bg-primary-dark",
-  cancelada: "bg-alert",
-  faltou: "bg-alert",
-};
+const WEEKDAY_LABELS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 
-const GRID_START_HOUR = 7;
-const GRID_END_HOUR = 20;
-const PX_PER_MIN = 1.6;
-const GRID_HEIGHT = (GRID_END_HOUR - GRID_START_HOUR) * 60 * PX_PER_MIN;
-
+// Formata como YYYY-MM-DD usando o horário LOCAL (evita o bug clássico de
+// toISOString(), que converte para UTC e pode "pular" o dia perto da
+// meia-noite em fusos negativos como o do Brasil).
 function formatDateISO(date: Date) {
-  return date.toISOString().slice(0, 10);
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function startOfMonth(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), 1);
 }
 
 function startOfWeek(date: Date) {
   const d = new Date(date);
-  const day = d.getDay(); // 0 = domingo
-  d.setDate(d.getDate() - day);
+  d.setDate(d.getDate() - d.getDay()); // 0 = domingo
   d.setHours(0, 0, 0, 0);
   return d;
 }
 
-function minutesSinceGridStart(dateStr: string) {
-  const d = new Date(dateStr);
-  return (d.getHours() - GRID_START_HOUR) * 60 + d.getMinutes();
+// Monta a grade completa do mês (sempre em semanas cheias, de domingo a
+// sábado), incluindo os dias do mês anterior/seguinte necessários para
+// preencher a primeira e a última semana.
+function buildMonthGrid(monthDate: Date) {
+  const first = startOfMonth(monthDate);
+  const last = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0);
+  const days: Date[] = [];
+  const cursor = startOfWeek(first);
+
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    days.push(new Date(cursor));
+    const pastLast = cursor.getTime() >= last.getTime();
+    const isSaturday = cursor.getDay() === 6;
+    cursor.setDate(cursor.getDate() + 1);
+    if (pastLast && isSaturday) break;
+  }
+  return days;
 }
 
 export default function AgendaPage() {
-  const [view, setView] = useState<"day" | "week">("day");
-  const [date, setDate] = useState(new Date());
+  const today = new Date();
+  const todayKey = formatDateISO(today);
+
+  const [currentMonth, setCurrentMonth] = useState(startOfMonth(today));
+  const [selectedDate, setSelectedDate] = useState(today);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [professionalFilter, setProfessionalFilter] = useState<string>("all");
@@ -83,23 +105,29 @@ export default function AgendaPage() {
   const [toast, setToast] = useState<string | null>(null);
   const [selectedAppt, setSelectedAppt] = useState<Appointment | null>(null);
 
+  const days = useMemo(() => buildMonthGrid(currentMonth), [currentMonth]);
+  const weeks = useMemo(() => {
+    const rows: Date[][] = [];
+    for (let i = 0; i < days.length; i += 7) rows.push(days.slice(i, i + 7));
+    return rows;
+  }, [days]);
+
   useEffect(() => {
     fetch("/api/professionals").then((r) => r.ok && r.json()).then((d) => d && setProfessionals(d.professionals));
   }, []);
 
   useEffect(() => {
     load();
-  }, [date, view]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentMonth]);
 
   async function load() {
     setLoading(true);
-    const rangeStart = view === "day" ? new Date(date) : startOfWeek(date);
-    rangeStart.setHours(0, 0, 0, 0);
-    const rangeEnd = new Date(rangeStart);
-    rangeEnd.setDate(rangeEnd.getDate() + (view === "day" ? 1 : 7));
-    rangeEnd.setMilliseconds(-1);
+    const from = days[0];
+    const to = new Date(days[days.length - 1]);
+    to.setHours(23, 59, 59, 999);
 
-    const res = await fetch(`/api/appointments?from=${rangeStart.toISOString()}&to=${rangeEnd.toISOString()}`);
+    const res = await fetch(`/api/appointments?from=${from.toISOString()}&to=${to.toISOString()}`);
     if (res.ok) setAppointments((await res.json()).appointments);
     setLoading(false);
   }
@@ -125,10 +153,20 @@ export default function AgendaPage() {
     load();
   }
 
-  function shiftPeriod(delta: number) {
-    const next = new Date(date);
-    next.setDate(next.getDate() + delta * (view === "day" ? 1 : 7));
-    setDate(next);
+  function shiftMonth(delta: number) {
+    setCurrentMonth((m) => new Date(m.getFullYear(), m.getMonth() + delta, 1));
+  }
+
+  function goToday() {
+    setCurrentMonth(startOfMonth(today));
+    setSelectedDate(today);
+  }
+
+  function selectDay(day: Date) {
+    if (day.getMonth() !== currentMonth.getMonth() || day.getFullYear() !== currentMonth.getFullYear()) {
+      setCurrentMonth(startOfMonth(day));
+    }
+    setSelectedDate(day);
   }
 
   const filteredAppointments = useMemo(
@@ -139,23 +177,30 @@ export default function AgendaPage() {
     [appointments, professionalFilter]
   );
 
-  const columnsProfessionals =
-    professionalFilter === "all" ? professionals : professionals.filter((p) => p.id === professionalFilter);
+  const appointmentsByDate = useMemo(() => {
+    const map: Record<string, Appointment[]> = {};
+    for (const a of filteredAppointments) {
+      const key = formatDateISO(new Date(a.startsAt));
+      (map[key] ??= []).push(a);
+    }
+    for (const key of Object.keys(map)) {
+      map[key].sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+    }
+    return map;
+  }, [filteredAppointments]);
 
-  const isToday = formatDateISO(date) === formatDateISO(new Date());
-  const weekStart = startOfWeek(date);
-  const weekDays = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(weekStart);
-    d.setDate(d.getDate() + i);
-    return d;
-  });
+  const selectedKey = formatDateISO(selectedDate);
+  const selectedDateAppointments = appointmentsByDate[selectedKey] ?? [];
+  const monthLabel = currentMonth.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+  const isViewingCurrentMonth =
+    currentMonth.getMonth() === today.getMonth() && currentMonth.getFullYear() === today.getFullYear();
 
   return (
-    <div className="p-8 max-w-6xl">
-      <div className="flex items-center justify-between mb-6">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-6xl">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <h1 className="font-display text-2xl text-ink">Agenda</h1>
         <button
-          onClick={() => setShowForm((s) => !s)}
+          onClick={() => setShowForm(true)}
           className="flex items-center gap-1.5 bg-primary hover:bg-primary-dark text-white text-sm font-medium rounded px-4 py-2 transition-colors"
         >
           <Plus size={15} />
@@ -175,46 +220,11 @@ export default function AgendaPage() {
         </div>
       )}
 
-      <div className="flex flex-wrap items-center gap-3 mb-6">
-        <div className="flex items-center gap-1 bg-surface border border-border rounded p-0.5">
-          <button
-            onClick={() => setView("day")}
-            className={`text-xs px-3 py-1.5 rounded ${view === "day" ? "bg-white shadow-sm text-ink font-medium" : "text-ink-muted"}`}
-          >
-            Dia
-          </button>
-          <button
-            onClick={() => setView("week")}
-            className={`text-xs px-3 py-1.5 rounded ${view === "week" ? "bg-white shadow-sm text-ink font-medium" : "text-ink-muted"}`}
-          >
-            Semana
-          </button>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button onClick={() => shiftPeriod(-1)} className="p-1.5 border border-border rounded hover:bg-surface">
-            <ChevronLeft size={16} />
-          </button>
-          <p className="text-sm font-medium text-ink min-w-[190px] text-center">
-            {view === "day"
-              ? date.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" })
-              : `${weekStart.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })} – ${weekDays[6].toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}`}
-            {isToday && view === "day" && <span className="text-primary"> · hoje</span>}
-          </p>
-          <button onClick={() => shiftPeriod(1)} className="p-1.5 border border-border rounded hover:bg-surface">
-            <ChevronRight size={16} />
-          </button>
-          {!isToday && (
-            <button onClick={() => setDate(new Date())} className="text-xs text-primary hover:text-primary-dark ml-1">
-              Hoje
-            </button>
-          )}
-        </div>
-
+      <div className="flex flex-wrap items-center gap-3 mb-4">
         <select
           value={professionalFilter}
           onChange={(e) => setProfessionalFilter(e.target.value)}
-          className="text-sm border border-border rounded px-3 py-1.5 bg-white ml-auto"
+          className="text-sm border border-border rounded px-3 py-1.5 bg-white"
         >
           <option value="all">Todos os profissionais</option>
           {professionals.map((p) => (
@@ -223,9 +233,123 @@ export default function AgendaPage() {
         </select>
       </div>
 
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4 lg:gap-6">
+        {/* Calendário mensal */}
+        <div className="bg-white border border-border rounded-lg overflow-hidden">
+          <div className="flex items-center justify-between px-3 sm:px-4 py-3 border-b border-border">
+            <button
+              onClick={() => shiftMonth(-1)}
+              aria-label="Mês anterior"
+              className="p-1.5 rounded hover:bg-surface text-ink-muted hover:text-ink"
+            >
+              <ChevronLeft size={18} />
+            </button>
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-semibold text-ink capitalize">{monthLabel}</p>
+              {!isViewingCurrentMonth && (
+                <button onClick={goToday} className="text-xs text-primary hover:text-primary-dark">
+                  Hoje
+                </button>
+              )}
+            </div>
+            <button
+              onClick={() => shiftMonth(1)}
+              aria-label="Próximo mês"
+              className="p-1.5 rounded hover:bg-surface text-ink-muted hover:text-ink"
+            >
+              <ChevronRight size={18} />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-7 text-center text-[11px] font-medium text-ink-muted uppercase pt-3 pb-1 px-1.5 sm:px-2">
+            {WEEKDAY_LABELS.map((d) => (
+              <div key={d}>{d}</div>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-7 gap-1 p-1.5 sm:p-2">
+            {weeks.flat().map((day) => {
+              const dayKey = formatDateISO(day);
+              const inMonth = day.getMonth() === currentMonth.getMonth();
+              const isToday = dayKey === todayKey;
+              const isSelected = dayKey === selectedKey;
+              const hasAppts = (appointmentsByDate[dayKey]?.length ?? 0) > 0;
+
+              return (
+                <button
+                  key={dayKey}
+                  onClick={() => selectDay(day)}
+                  className={`aspect-square sm:aspect-auto sm:h-16 lg:h-20 flex flex-col items-center justify-center gap-1 rounded-md text-sm transition-colors ${
+                    isSelected
+                      ? "bg-primary text-white font-semibold"
+                      : isToday
+                      ? "border border-primary text-primary font-medium hover:bg-primary/5"
+                      : inMonth
+                      ? "text-ink hover:bg-surface"
+                      : "text-ink-muted/30 hover:bg-surface"
+                  }`}
+                >
+                  <span>{day.getDate()}</span>
+                  {hasAppts && (
+                    <span className={`w-1.5 h-1.5 rounded-full ${isSelected ? "bg-white" : "bg-primary"}`} />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Agendamentos do dia selecionado */}
+        <div className="bg-white border border-border rounded-lg p-4 h-fit lg:sticky lg:top-6">
+          <p className="text-sm font-semibold text-ink capitalize">
+            {selectedDate.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" })}
+          </p>
+          <p className="text-xs text-primary mb-4 h-4">{selectedKey === todayKey ? "Hoje" : ""}</p>
+
+          <button
+            onClick={() => setShowForm(true)}
+            className="w-full flex items-center justify-center gap-1.5 border border-dashed border-primary/40 text-primary hover:bg-primary/5 text-sm font-medium rounded py-2 mb-4 transition-colors"
+          >
+            <Plus size={14} />
+            Novo agendamento
+          </button>
+
+          {loading && <p className="text-sm text-ink-muted text-center py-6">Carregando...</p>}
+
+          {!loading && selectedDateAppointments.length === 0 && (
+            <div className="text-center py-8">
+              <CalendarX size={26} className="mx-auto text-ink-muted/30 mb-2" />
+              <p className="text-sm text-ink-muted">Nenhum agendamento neste dia.</p>
+            </div>
+          )}
+
+          {!loading && selectedDateAppointments.length > 0 && (
+            <div className="space-y-2">
+              {selectedDateAppointments.map((appt) => (
+                <button
+                  key={appt.id}
+                  onClick={() => setSelectedAppt(appt)}
+                  className={`w-full text-left rounded border px-3 py-2 hover:shadow-sm transition-shadow ${STATUS_COLORS[appt.status]}`}
+                >
+                  <p className="text-xs font-semibold leading-tight">
+                    {new Date(appt.startsAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                    {" · "}
+                    {appt.patient.name}
+                  </p>
+                  <p className="text-[11px] opacity-80 truncate leading-tight mt-0.5">
+                    {appt.procedure?.name ?? "Sem procedimento"}
+                    {appt.resource ? ` · ${appt.resource.name}` : ""}
+                  </p>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
       {showForm && (
         <NewAppointmentForm
-          date={date}
+          date={selectedDate}
           defaultProfessionalId={professionalFilter !== "all" ? professionalFilter : ""}
           existingAppointments={appointments}
           onCreated={() => {
@@ -236,29 +360,6 @@ export default function AgendaPage() {
         />
       )}
 
-      {loading && <p className="text-sm text-ink-muted py-8 text-center">Carregando...</p>}
-
-      {!loading && view === "day" && (
-        <DayGrid
-          appointments={filteredAppointments}
-          columnsProfessionals={columnsProfessionals}
-          showColumns={professionalFilter === "all" && professionals.length > 1}
-          onSelect={setSelectedAppt}
-        />
-      )}
-
-      {!loading && view === "week" && (
-        <WeekOverview
-          weekDays={weekDays}
-          appointments={filteredAppointments}
-          onSelectDay={(d) => {
-            setDate(d);
-            setView("day");
-          }}
-          onSelect={setSelectedAppt}
-        />
-      )}
-
       {selectedAppt && (
         <AppointmentDetail
           appt={selectedAppt}
@@ -266,162 +367,6 @@ export default function AgendaPage() {
           onChangeStatus={changeStatus}
         />
       )}
-    </div>
-  );
-}
-
-// ------------------------------------------------------------
-// Grade de horários do dia — colunas por profissional
-// ------------------------------------------------------------
-function DayGrid({
-  appointments,
-  columnsProfessionals,
-  showColumns,
-  onSelect,
-}: {
-  appointments: Appointment[];
-  columnsProfessionals: Professional[];
-  showColumns: boolean;
-  onSelect: (a: Appointment) => void;
-}) {
-  const hours = Array.from({ length: GRID_END_HOUR - GRID_START_HOUR }, (_, i) => GRID_START_HOUR + i);
-  const columns = showColumns && columnsProfessionals.length > 0 ? columnsProfessionals : [null];
-
-  return (
-    <div className="bg-white border border-border rounded overflow-hidden">
-      <div className="flex">
-        {/* Coluna de horários */}
-        <div className="w-14 shrink-0 border-r border-border">
-          <div className="h-10 border-b border-border" />
-          <div style={{ height: GRID_HEIGHT }} className="relative">
-            {hours.map((h) => (
-              <div
-                key={h}
-                className="absolute left-0 right-0 text-[11px] text-ink-muted text-right pr-2 -translate-y-2"
-                style={{ top: (h - GRID_START_HOUR) * 60 * PX_PER_MIN }}
-              >
-                {String(h).padStart(2, "0")}:00
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Colunas de profissionais */}
-        <div className="flex-1 flex overflow-x-auto">
-          {columns.map((prof, colIndex) => {
-            const colAppointments = prof
-              ? appointments.filter((a) => a.professionalUserId === prof.id)
-              : appointments;
-
-            return (
-              <div key={prof?.id ?? "single"} className={`flex-1 min-w-[220px] ${colIndex > 0 ? "border-l border-border" : ""}`}>
-                {showColumns && (
-                  <div className="h-10 border-b border-border flex items-center justify-center px-2">
-                    <p className="text-xs font-medium text-ink truncate">{prof?.name ?? "—"}</p>
-                  </div>
-                )}
-                {!showColumns && <div className="h-10 border-b border-border" />}
-
-                <div className="relative" style={{ height: GRID_HEIGHT }}>
-                  {/* Linhas de hora */}
-                  {hours.map((h) => (
-                    <div
-                      key={h}
-                      className="absolute left-0 right-0 border-t border-border/70"
-                      style={{ top: (h - GRID_START_HOUR) * 60 * PX_PER_MIN }}
-                    />
-                  ))}
-
-                  {colAppointments.map((appt) => {
-                    const top = Math.max(0, minutesSinceGridStart(appt.startsAt) * PX_PER_MIN);
-                    const height = Math.max(22, appt.durationMinutes * PX_PER_MIN - 2);
-                    return (
-                      <button
-                        key={appt.id}
-                        onClick={() => onSelect(appt)}
-                        className={`absolute left-1 right-1 rounded border px-2 py-1 text-left overflow-hidden hover:shadow-sm transition-shadow ${STATUS_COLORS[appt.status]}`}
-                        style={{ top, height }}
-                      >
-                        <p className="text-[11px] font-medium leading-tight truncate">
-                          {new Date(appt.startsAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })} · {appt.patient.name}
-                        </p>
-                        {height > 32 && (
-                          <p className="text-[10px] leading-tight truncate opacity-80">
-                            {appt.procedure?.name ?? "Sem procedimento"}
-                          </p>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ------------------------------------------------------------
-// Visão semanal — 7 colunas, lista compacta por dia
-// ------------------------------------------------------------
-function WeekOverview({
-  weekDays,
-  appointments,
-  onSelectDay,
-  onSelect,
-}: {
-  weekDays: Date[];
-  appointments: Appointment[];
-  onSelectDay: (d: Date) => void;
-  onSelect: (a: Appointment) => void;
-}) {
-  const todayStr = formatDateISO(new Date());
-
-  return (
-    <div className="grid grid-cols-7 gap-2">
-      {weekDays.map((day) => {
-        const dayStr = formatDateISO(day);
-        const dayAppointments = appointments
-          .filter((a) => formatDateISO(new Date(a.startsAt)) === dayStr)
-          .sort((a, b) => a.startsAt.localeCompare(b.startsAt));
-        const isToday = dayStr === todayStr;
-
-        return (
-          <div key={dayStr} className="bg-white border border-border rounded overflow-hidden flex flex-col">
-            <button
-              onClick={() => onSelectDay(day)}
-              className={`text-center py-2 border-b border-border hover:bg-surface ${isToday ? "bg-primary/5" : ""}`}
-            >
-              <p className="text-[11px] text-ink-muted uppercase">
-                {day.toLocaleDateString("pt-BR", { weekday: "short" })}
-              </p>
-              <p className={`text-sm font-medium ${isToday ? "text-primary" : "text-ink"}`}>
-                {day.getDate()}
-              </p>
-            </button>
-            <div className="flex-1 p-1.5 space-y-1 min-h-[120px]">
-              {dayAppointments.length === 0 && (
-                <p className="text-[11px] text-ink-muted/60 text-center pt-3">—</p>
-              )}
-              {dayAppointments.map((appt) => (
-                <button
-                  key={appt.id}
-                  onClick={() => onSelect(appt)}
-                  className="w-full text-left flex items-center gap-1.5 px-1.5 py-1 rounded hover:bg-surface"
-                >
-                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${STATUS_DOT[appt.status]}`} />
-                  <span className="text-[11px] text-ink-muted shrink-0">
-                    {new Date(appt.startsAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
-                  </span>
-                  <span className="text-[11px] text-ink truncate">{appt.patient.name}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        );
-      })}
     </div>
   );
 }
@@ -506,6 +451,10 @@ function AppointmentDetail({
   );
 }
 
+// ------------------------------------------------------------
+// Novo agendamento — o profissional escolhe data e horário
+// manualmente, sem horários pré-definidos na interface.
+// ------------------------------------------------------------
 function NewAppointmentForm({
   date,
   defaultProfessionalId,
@@ -527,24 +476,34 @@ function NewAppointmentForm({
   const [resources, setResources] = useState<Resource[]>([]);
   const [procedures, setProcedures] = useState<Procedure[]>([]);
 
+  const [formDate, setFormDate] = useState(() => formatDateISO(date));
   const [form, setForm] = useState({
     professionalUserId: defaultProfessionalId,
     resourceId: "",
     procedureId: "",
-    time: "09:00",
+    time: "",
     durationMinutes: 30,
     notes: "",
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const disabledSlots = useMemo(() => {
+  // Aviso informativo (não bloqueante) dos horários já ocupados por esse
+  // profissional na data escolhida — a validação real de conflito é feita
+  // no servidor ao salvar.
+  const occupiedTimes = useMemo(() => {
     if (!form.professionalUserId) return [];
-    const dayStr = formatDateISO(date);
     return existingAppointments
-      .filter((a) => a.professionalUserId === form.professionalUserId && formatDateISO(new Date(a.startsAt)) === dayStr)
-      .map((a) => new Date(a.startsAt).toTimeString().slice(0, 5));
-  }, [existingAppointments, form.professionalUserId, date]);
+      .filter(
+        (a) =>
+          a.professionalUserId === form.professionalUserId &&
+          formatDateISO(new Date(a.startsAt)) === formDate &&
+          a.status !== "cancelada" &&
+          a.status !== "faltou"
+      )
+      .map((a) => new Date(a.startsAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }))
+      .sort();
+  }, [existingAppointments, form.professionalUserId, formDate]);
 
   useEffect(() => {
     fetch("/api/professionals").then((r) => r.ok && r.json()).then((d) => d && setProfessionals(d.professionals));
@@ -570,12 +529,16 @@ function NewAppointmentForm({
       setError("Selecione um paciente.");
       return;
     }
+    if (!form.time) {
+      setError("Informe o horário do atendimento.");
+      return;
+    }
     setSaving(true);
     setError(null);
 
+    const [year, month, day] = formDate.split("-").map(Number);
     const [hours, minutes] = form.time.split(":").map(Number);
-    const startsAt = new Date(date);
-    startsAt.setHours(hours, minutes, 0, 0);
+    const startsAt = new Date(year, month - 1, day, hours, minutes, 0, 0);
 
     const res = await fetch("/api/appointments", {
       method: "POST",
@@ -600,107 +563,134 @@ function NewAppointmentForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="bg-white border border-border rounded p-5 mb-4 space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-ink">Novo agendamento</h2>
-        <button type="button" onClick={onCancel} className="text-ink-muted hover:text-ink">
-          <X size={16} />
-        </button>
-      </div>
+    <div
+      className="fixed inset-0 z-50 flex items-start sm:items-center justify-center bg-black/30 px-4 py-6 overflow-y-auto"
+      onClick={onCancel}
+    >
+      <form
+        onSubmit={handleSubmit}
+        onClick={(e) => e.stopPropagation()}
+        className="bg-white border border-border rounded-lg shadow-lg w-full max-w-md p-5 space-y-4 animate-fade-in-up my-auto"
+      >
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-ink">Novo agendamento</h2>
+          <button type="button" onClick={onCancel} className="text-ink-muted hover:text-ink">
+            <X size={16} />
+          </button>
+        </div>
 
-      {error && <div className="text-sm text-alert bg-alert/5 border border-alert/20 rounded px-3 py-2">{error}</div>}
+        {error && <div className="text-sm text-alert bg-alert/5 border border-alert/20 rounded px-3 py-2">{error}</div>}
 
-      <div className="relative">
-        <label className="block text-xs text-ink-muted mb-1">Paciente</label>
-        {selectedPatient ? (
-          <div className="flex items-center justify-between rounded border border-border px-3 py-2 text-sm">
-            <span className="text-ink">{selectedPatient.name}</span>
-            <button type="button" onClick={() => setSelectedPatient(null)} className="text-ink-muted hover:text-alert">
-              <X size={14} />
-            </button>
+        <div className="relative">
+          <label className="block text-xs text-ink-muted mb-1">Paciente</label>
+          {selectedPatient ? (
+            <div className="flex items-center justify-between rounded border border-border px-3 py-2 text-sm">
+              <span className="text-ink">{selectedPatient.name}</span>
+              <button type="button" onClick={() => setSelectedPatient(null)} className="text-ink-muted hover:text-alert">
+                <X size={14} />
+              </button>
+            </div>
+          ) : (
+            <>
+              <input
+                value={patientQuery}
+                onChange={(e) => setPatientQuery(e.target.value)}
+                placeholder="Buscar paciente por nome..."
+                className="w-full rounded border border-border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+              />
+              {patientResults.length > 0 && (
+                <ul className="absolute z-10 w-full bg-white border border-border rounded mt-1 max-h-48 overflow-y-auto shadow-sm">
+                  {patientResults.map((p) => (
+                    <li key={p.id}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedPatient(p);
+                          setPatientQuery("");
+                          setPatientResults([]);
+                        }}
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-surface"
+                      >
+                        {p.name}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs text-ink-muted mb-1">Profissional</label>
+            <select
+              required
+              value={form.professionalUserId}
+              onChange={(e) => setForm((f) => ({ ...f, professionalUserId: e.target.value }))}
+              className="w-full rounded border border-border px-2 py-2 text-sm"
+            >
+              <option value="">Selecione...</option>
+              {professionals.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+            {professionals.length === 0 && (
+              <p className="text-[11px] text-alert mt-1">
+                Nenhum usuário com papel "Profissional" na clínica ainda.
+              </p>
+            )}
           </div>
-        ) : (
-          <>
+          <div>
+            <label className="block text-xs text-ink-muted mb-1">Sala/cadeira</label>
+            <select
+              value={form.resourceId}
+              onChange={(e) => setForm((f) => ({ ...f, resourceId: e.target.value }))}
+              className="w-full rounded border border-border px-2 py-2 text-sm"
+            >
+              <option value="">Nenhuma</option>
+              {resources.map((r) => (
+                <option key={r.id} value={r.id}>{r.name}</option>
+              ))}
+            </select>
+            {resources.length === 0 && (
+              <p className="text-[11px] text-ink-muted mt-1">
+                <Link href="/settings" className="text-primary hover:text-primary-dark">
+                  Cadastrar sala/cadeira
+                </Link>
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs text-ink-muted mb-1">Data</label>
             <input
-              value={patientQuery}
-              onChange={(e) => setPatientQuery(e.target.value)}
-              placeholder="Buscar paciente por nome..."
+              type="date"
+              required
+              value={formDate}
+              onChange={(e) => setFormDate(e.target.value)}
               className="w-full rounded border border-border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
             />
-            {patientResults.length > 0 && (
-              <ul className="absolute z-10 w-full bg-white border border-border rounded mt-1 max-h-48 overflow-y-auto shadow-sm">
-                {patientResults.map((p) => (
-                  <li key={p.id}>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedPatient(p);
-                        setPatientQuery("");
-                        setPatientResults([]);
-                      }}
-                      className="w-full text-left px-3 py-2 text-sm hover:bg-surface"
-                    >
-                      {p.name}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </>
+          </div>
+          <div>
+            <label className="block text-xs text-ink-muted mb-1">Horário</label>
+            <input
+              type="time"
+              required
+              value={form.time}
+              onChange={(e) => setForm((f) => ({ ...f, time: e.target.value }))}
+              className="w-full rounded border border-border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+            />
+          </div>
+        </div>
+        {occupiedTimes.length > 0 && (
+          <p className="text-[11px] text-ink-muted -mt-2">
+            Horários já ocupados para esse profissional neste dia: {occupiedTimes.join(", ")}
+          </p>
         )}
-      </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div>
-          <label className="block text-xs text-ink-muted mb-1">Profissional</label>
-          <select
-            required
-            value={form.professionalUserId}
-            onChange={(e) => setForm((f) => ({ ...f, professionalUserId: e.target.value }))}
-            className="w-full rounded border border-border px-2 py-2 text-sm"
-          >
-            <option value="">Selecione...</option>
-            {professionals.map((p) => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </select>
-          {professionals.length === 0 && (
-            <p className="text-[11px] text-alert mt-1">
-              Nenhum usuário com papel "Profissional" na clínica ainda.
-            </p>
-          )}
-        </div>
-        <div>
-          <label className="block text-xs text-ink-muted mb-1">Sala/cadeira</label>
-          <select
-            value={form.resourceId}
-            onChange={(e) => setForm((f) => ({ ...f, resourceId: e.target.value }))}
-            className="w-full rounded border border-border px-2 py-2 text-sm"
-          >
-            <option value="">Nenhuma</option>
-            {resources.map((r) => (
-              <option key={r.id} value={r.id}>{r.name}</option>
-            ))}
-          </select>
-          {resources.length === 0 && (
-            <p className="text-[11px] text-ink-muted mt-1">
-              <Link href="/settings" className="text-primary hover:text-primary-dark">
-                Cadastrar sala/cadeira
-              </Link>
-            </p>
-          )}
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div>
-          <label className="block text-xs text-ink-muted mb-1">Horário — {form.time}</label>
-          <TimeSlotPicker
-            value={form.time}
-            onChange={(time) => setForm((f) => ({ ...f, time }))}
-            disabledSlots={disabledSlots}
-          />
-        </div>
         <div>
           <label className="block text-xs text-ink-muted mb-1">Duração</label>
           <DurationPicker
@@ -708,39 +698,48 @@ function NewAppointmentForm({
             onChange={(durationMinutes) => setForm((f) => ({ ...f, durationMinutes }))}
           />
         </div>
-      </div>
 
-      <div>
-        <label className="block text-xs text-ink-muted mb-1">Procedimento (opcional)</label>
-        <select
-          value={form.procedureId}
-          onChange={(e) => setForm((f) => ({ ...f, procedureId: e.target.value }))}
-          className="w-full max-w-xs rounded border border-border px-2 py-2 text-sm"
-        >
-          <option value="">Nenhum</option>
-          {procedures.map((p) => (
-            <option key={p.id} value={p.id}>{p.name}</option>
-          ))}
-        </select>
-      </div>
+        <div>
+          <label className="block text-xs text-ink-muted mb-1">Procedimento (opcional)</label>
+          <select
+            value={form.procedureId}
+            onChange={(e) => setForm((f) => ({ ...f, procedureId: e.target.value }))}
+            className="w-full rounded border border-border px-2 py-2 text-sm"
+          >
+            <option value="">Nenhum</option>
+            {procedures.map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+        </div>
 
-      <div>
-        <label className="block text-xs text-ink-muted mb-1">Observações</label>
-        <textarea
-          value={form.notes}
-          onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-          rows={2}
-          className="w-full rounded border border-border px-3 py-2 text-sm"
-        />
-      </div>
+        <div>
+          <label className="block text-xs text-ink-muted mb-1">Observações</label>
+          <textarea
+            value={form.notes}
+            onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
+            rows={2}
+            className="w-full rounded border border-border px-3 py-2 text-sm"
+          />
+        </div>
 
-      <button
-        type="submit"
-        disabled={saving}
-        className="bg-primary hover:bg-primary-dark text-white rounded px-4 py-2 text-sm font-medium transition-colors disabled:opacity-60"
-      >
-        {saving ? "Agendando..." : "Confirmar agendamento"}
-      </button>
-    </form>
+        <div className="flex items-center gap-2 pt-1">
+          <button
+            type="submit"
+            disabled={saving}
+            className="flex-1 bg-primary hover:bg-primary-dark text-white rounded px-4 py-2 text-sm font-medium transition-colors disabled:opacity-60"
+          >
+            {saving ? "Agendando..." : "Confirmar agendamento"}
+          </button>
+          <button
+            type="button"
+            onClick={onCancel}
+            className="px-4 py-2 text-sm font-medium text-ink-muted hover:text-ink border border-border rounded transition-colors"
+          >
+            Cancelar
+          </button>
+        </div>
+      </form>
+    </div>
   );
 }
