@@ -40,7 +40,7 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex flex-col lg:flex-row bg-surface">
       {/* Banner no mobile / painel visual completo no desktop */}
-      <div className="h-40 lg:h-auto lg:w-1/2">
+      <div className="hidden lg:block lg:w-1/2">
         <LoginVisual />
       </div>
 
