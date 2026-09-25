@@ -1,9 +1,3 @@
-// ============================================================
-// SCHEMA - FASE 1 (Fundação)
-// Entidades: Organization, Unit, User, Role, Permission,
-// RolePermission, Patient (esqueleto), AuditLog
-// ============================================================
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -13,299 +7,214 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ------------------------------------------------------------
-// TENANT
-// ------------------------------------------------------------
-
 model Organization {
-  id        String   @id @default(cuid())
+  id        String     @id @default(cuid())
   name      String
-  document  String?  @unique // CNPJ
-  planTier  String   @default("trial") // trial | starter | pro | enterprise
-  status    String   @default("active") // active | suspended | canceled
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  units       Unit[]
-  users       User[]
-  patients    Patient[]
-  roles       Role[]
-  auditLogs   AuditLog[]
+  document  String?    @unique
+  planTier  String     @default("trial")
+  status    String     @default("active")
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  auditLogs AuditLog[]
+  patients  Patient[]
+  roles     Role[]
+  units     Unit[]
+  users     User[]
 
   @@map("organizations")
 }
 
 model Unit {
-  id             String   @id @default(cuid())
+  id             String       @id @default(cuid())
   organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   name           String
-  isDefault      Boolean  @default(true)
+  isDefault      Boolean      @default(true)
   address        String?
-  createdAt      DateTime @default(now())
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
   @@map("units")
 }
 
-// ------------------------------------------------------------
-// USUÁRIOS, PAPÉIS E PERMISSÕES
-// ------------------------------------------------------------
-
 model User {
-  id             String   @id @default(cuid())
+  id             String       @id @default(cuid())
   organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-
   name           String
   email          String
   passwordHash   String
-  active         Boolean  @default(true)
-
+  active         Boolean      @default(true)
   roleId         String
-  role           Role     @relation(fields: [roleId], references: [id])
-
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
   auditLogs      AuditLog[]
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  role           Role         @relation(fields: [roleId], references: [id])
 
-  // e-mail único por organização (não globalmente), permitindo o mesmo
-  // e-mail em clínicas diferentes sem conflito
   @@unique([organizationId, email])
   @@index([organizationId])
   @@map("users")
 }
 
 model Role {
-  id             String   @id @default(cuid())
+  id             String           @id @default(cuid())
   organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-
-  name           String   // Administrador | Gestor | Profissional | Recepcionista | Financeiro | custom
-  isSystem       Boolean  @default(true) // papéis padrão criados no onboarding
-
-  users          User[]
+  name           String
+  isSystem       Boolean          @default(true)
+  createdAt      DateTime         @default(now())
   permissions    RolePermission[]
-
-  createdAt      DateTime @default(now())
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  users          User[]
 
   @@unique([organizationId, name])
   @@map("roles")
 }
 
-// Permissão granular no formato "resource:action", ex: "patients:delete"
 model Permission {
-  id     String @id @default(cuid())
-  key    String @unique // ex: "patients:read", "financial:write"
-  label  String // descrição legível, ex: "Visualizar pacientes"
-
-  roles  RolePermission[]
+  id    String           @id @default(cuid())
+  key   String           @unique
+  label String
+  roles RolePermission[]
 
   @@map("permissions")
 }
 
 model RolePermission {
   roleId       String
-  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
   permissionId String
   permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
 
   @@id([roleId, permissionId])
   @@map("role_permissions")
 }
 
-// ------------------------------------------------------------
-// PACIENTE (Fase 2 — cadastro completo)
-// ------------------------------------------------------------
-
 model Patient {
-  id             String   @id @default(cuid())
-  organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-
-  name              String
-  document          String?   // CPF
-  birthDate         DateTime?
-  phone             String?
-  whatsapp          String?
-  email             String?
-
-  addressStreet     String?
-  addressNumber     String?
-  addressComplement String?
-  addressCity       String?
-  addressState      String?
-  addressZipCode    String?
-
+  id                    String              @id @default(cuid())
+  organizationId        String
+  name                  String
+  document              String?
+  birthDate             DateTime?
+  phone                 String?
+  whatsapp              String?
+  email                 String?
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  active                Boolean             @default(true)
+  addressCity           String?
+  addressComplement     String?
+  addressNumber         String?
+  addressState          String?
+  addressStreet         String?
+  addressZipCode        String?
   emergencyContactName  String?
   emergencyContactPhone String?
-
-  notes             String?  // observações gerais (não clínicas)
-
-  active            Boolean  @default(true) // soft delete: nunca apagamos paciente de fato
-
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  attachments    PatientAttachment[]
-  medicalRecord  MedicalRecord?
-  toothRecords   ToothRecord[]
-  budgets        Budget[]
-  receivables    Receivable[]
-  appointments   Appointment[]
+  notes                 String?
+  appointments          Appointment[]
+  budgets               Budget[]
+  medicalRecord         MedicalRecord?
+  attachments           PatientAttachment[]
+  organization          Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  receivables           Receivable[]
+  toothRecords          ToothRecord[]
 
   @@index([organizationId])
   @@index([organizationId, name])
   @@map("patients")
 }
 
-// Documentos/anexos do paciente (RG, exames, contratos etc.)
-// Armazenamento real de arquivo fica fora do escopo desta fase —
-// aqui guardamos só a referência; ver nota no README sobre isso.
 model PatientAttachment {
   id             String   @id @default(cuid())
   organizationId String
   patientId      String
-  patient        Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
-
   fileName       String
-  fileUrl        String   // URL do storage (S3, R2 etc. — a configurar)
-  uploadedBy     String?  // userId
-
+  fileUrl        String
+  uploadedBy     String?
   createdAt      DateTime @default(now())
+  patient        Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
   @@index([patientId])
   @@map("patient_attachments")
 }
 
-// ------------------------------------------------------------
-// PRONTUÁRIO ELETRÔNICO (Fase 2)
-// ------------------------------------------------------------
-
-// Dados "de cabeceira" do prontuário: 1 por paciente, editável
-// (anamnese, alergias, medicações). O histórico clínico
-// propriamente dito fica em RecordEntry, que é IMUTÁVEL —
-// nunca editamos nem apagamos uma entrada já registrada,
-// só criamos novas (isso é o que a auditoria clínica exige).
 model MedicalRecord {
-  id             String   @id @default(cuid())
+  id             String        @id @default(cuid())
   organizationId String
-
-  patientId      String   @unique
-  patient        Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
-
-  anamnesis      String?  // texto livre da anamnese inicial
+  patientId      String        @unique
+  anamnesis      String?
   allergies      String?
-  medications    String?  // medicamentos em uso
-
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
+  medications    String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  patient        Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
   entries        RecordEntry[]
 
   @@index([organizationId])
   @@map("medical_records")
 }
 
-// Entrada de evolução clínica — imutável após criada.
-// Cobre: evolução, diagnóstico, plano de tratamento registrado,
-// procedimento realizado, anexo de imagem/documento referenciado.
 model RecordEntry {
-  id              String   @id @default(cuid())
+  id              String        @id @default(cuid())
   organizationId  String
-
   medicalRecordId String
-  medicalRecord   MedicalRecord @relation(fields: [medicalRecordId], references: [id], onDelete: Cascade)
-
-  authorUserId    String   // quem escreveu (profissional/usuário logado)
-
-  type            String   // evolucao | diagnostico | plano_tratamento | procedimento_realizado | anexo
+  authorUserId    String
+  type            String
   content         String
-
-  createdAt       DateTime @default(now())
+  createdAt       DateTime      @default(now())
+  medicalRecord   MedicalRecord @relation(fields: [medicalRecordId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
   @@index([medicalRecordId])
   @@map("record_entries")
 }
 
-// ------------------------------------------------------------
-// ODONTOGRAMA (Fase 2)
-// ------------------------------------------------------------
-
-// Um registro por dente (notação FDI: 11-18, 21-28, 31-38, 41-48,
-// mais dentes decíduos 51-85 quando aplicável). O ESTADO ATUAL do
-// dente fica aqui (upsert); o HISTÓRICO de mudanças fica gravado
-// em AuditLog (entityType "ToothRecord"), então nunca perdemos o
-// que já foi registrado antes.
 model ToothRecord {
-  id             String   @id @default(cuid())
-  organizationId String
-
-  patientId      String
-  patient        Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
-
-  toothNumber    String   // ex: "11", "36" (notação FDI)
-
-  condition          String? // ex: higido | cariado | restaurado | ausente | implante
-  plannedProcedure   String? // tratamento planejado para esse dente
-  performedProcedure String? // tratamento já realizado
+  id                 String   @id @default(cuid())
+  organizationId     String
+  patientId          String
+  toothNumber        String
+  condition          String?
+  plannedProcedure   String?
+  performedProcedure String?
   notes              String?
-
-  updatedAt      DateTime @updatedAt
-  updatedBy      String?  // userId de quem fez a última alteração
+  updatedAt          DateTime @updatedAt
+  updatedBy          String?
+  patient            Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
 
   @@unique([patientId, toothNumber])
   @@index([organizationId])
   @@map("tooth_records")
 }
 
-// ------------------------------------------------------------
-// PROCEDIMENTOS (catálogo) — Fase 3
-// ------------------------------------------------------------
-
 model Procedure {
-  id             String   @id @default(cuid())
-  organizationId String
-
-  name           String
-  category       String?
-  defaultPrice   Decimal  @db.Decimal(10, 2)
-  active         Boolean  @default(true)
-
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  budgetItems    BudgetItem[]
+  id              String           @id @default(cuid())
+  organizationId  String
+  name            String
+  category        String?
+  defaultPrice    Decimal          @db.Decimal(10, 2)
+  active          Boolean          @default(true)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  appointments    Appointment[]
+  budgetItems     BudgetItem[]
   commissionRules CommissionRule[]
-  appointments   Appointment[]
 
   @@index([organizationId])
   @@map("procedures")
 }
 
-// ------------------------------------------------------------
-// ORÇAMENTOS E TRATAMENTOS — Fase 3
-// ------------------------------------------------------------
-
 model Budget {
-  id                 String   @id @default(cuid())
+  id                 String       @id @default(cuid())
   organizationId     String
-
   patientId          String
-  patient            Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
-
-  professionalUserId String?  // dentista responsável (referencia User com papel Profissional)
-
-  status             String   @default("draft") // draft | sent | approved | rejected
+  professionalUserId String?
+  status             String       @default("draft")
   notes              String?
-
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
-
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
   items              BudgetItem[]
+  patient            Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
   receivable         Receivable?
 
   @@index([organizationId])
@@ -314,54 +223,38 @@ model Budget {
 }
 
 model BudgetItem {
-  id             String   @id @default(cuid())
+  id             String    @id @default(cuid())
   organizationId String
-
   budgetId       String
-  budget         Budget   @relation(fields: [budgetId], references: [id], onDelete: Cascade)
-
   procedureId    String
-  procedure      Procedure @relation(fields: [procedureId], references: [id])
-
-  // snapshot do nome/preço no momento — se o procedimento mudar de preço
-  // depois, o orçamento já emitido não deve mudar retroativamente
   procedureName  String
-  quantity       Int      @default(1)
-  unitPrice      Decimal  @db.Decimal(10, 2)
-  discount       Decimal  @default(0) @db.Decimal(10, 2)
-  total          Decimal  @db.Decimal(10, 2)
+  quantity       Int       @default(1)
+  unitPrice      Decimal   @db.Decimal(10, 2)
+  discount       Decimal   @default(0) @db.Decimal(10, 2)
+  total          Decimal   @db.Decimal(10, 2)
+  budget         Budget    @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  procedure      Procedure @relation(fields: [procedureId], references: [id])
 
   @@index([organizationId])
   @@index([budgetId])
   @@map("budget_items")
 }
 
-// ------------------------------------------------------------
-// FINANCEIRO — Fase 3
-// ------------------------------------------------------------
-
-// Conta a receber — criada automaticamente quando um orçamento é aprovado.
 model Receivable {
-  id             String   @id @default(cuid())
+  id             String                  @id @default(cuid())
   organizationId String
-
   patientId      String
-  patient        Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
-
-  budgetId       String?  @unique
-  budget         Budget?  @relation(fields: [budgetId], references: [id])
-
-  appointmentId  String?  @unique
-  appointment    Appointment? @relation(fields: [appointmentId], references: [id])
-
+  budgetId       String?                 @unique
   description    String
-  totalAmount    Decimal  @db.Decimal(10, 2)
-  status         String   @default("pending") // pending | partially_paid | paid | canceled
-
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
+  totalAmount    Decimal                 @db.Decimal(10, 2)
+  status         String                  @default("pending")
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
+  appointmentId  String?                 @unique
   installments   ReceivableInstallment[]
+  appointment    Appointment?            @relation(fields: [appointmentId], references: [id])
+  budget         Budget?                 @relation(fields: [budgetId], references: [id])
+  patient        Patient                 @relation(fields: [patientId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
   @@index([patientId])
@@ -369,104 +262,75 @@ model Receivable {
 }
 
 model ReceivableInstallment {
-  id             String   @id @default(cuid())
-  organizationId String
-
-  receivableId   String
-  receivable     Receivable @relation(fields: [receivableId], references: [id], onDelete: Cascade)
-
-  number         Int      // 1, 2, 3...
-  amount         Decimal  @db.Decimal(10, 2)
-  dueDate        DateTime
-  paidAt         DateTime?
-  paymentMethod  String?  // dinheiro | pix | cartao_credito | cartao_debito | boleto
-  status         String   @default("pending") // pending | paid | overdue | canceled
-
+  id                String            @id @default(cuid())
+  organizationId    String
+  receivableId      String
+  number            Int
+  amount            Decimal           @db.Decimal(10, 2)
+  dueDate           DateTime
+  paidAt            DateTime?
+  paymentMethod     String?
+  status            String            @default("pending")
   commissionEntries CommissionEntry[]
+  receivable        Receivable        @relation(fields: [receivableId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
   @@index([receivableId])
   @@map("receivable_installments")
 }
 
-// Conta a pagar — lançada manualmente (despesas da clínica).
 model Payable {
-  id             String   @id @default(cuid())
+  id             String    @id @default(cuid())
   organizationId String
-
   description    String
   category       String?
-  amount         Decimal  @db.Decimal(10, 2)
+  amount         Decimal   @db.Decimal(10, 2)
   dueDate        DateTime
   paidAt         DateTime?
-  status         String   @default("pending") // pending | paid | overdue | canceled
-
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  status         String    @default("pending")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   @@index([organizationId])
   @@map("payables")
 }
 
-// ------------------------------------------------------------
-// COMISSÕES — Fase 3
-// ------------------------------------------------------------
-
-// Regra: X% de comissão para um profissional, opcionalmente restrita
-// a um procedimento específico (procedureId nulo = vale para todos).
 model CommissionRule {
-  id                 String   @id @default(cuid())
+  id                 String     @id @default(cuid())
   organizationId     String
-
   professionalUserId String
   procedureId        String?
+  percentage         Decimal    @db.Decimal(5, 2)
+  createdAt          DateTime   @default(now())
   procedure          Procedure? @relation(fields: [procedureId], references: [id])
-
-  percentage         Decimal  @db.Decimal(5, 2) // ex: 30.00 = 30%
-
-  createdAt          DateTime @default(now())
 
   @@index([organizationId])
   @@map("commission_rules")
 }
 
-// Lançamento de comissão — gerado automaticamente quando uma parcela
-// de conta a receber é marcada como paga (nunca calculado "na hora"
-// em relatório: fica registrado, para não mudar se a regra mudar depois).
 model CommissionEntry {
-  id                       String   @id @default(cuid())
-  organizationId           String
-
-  professionalUserId       String
-  receivableInstallmentId  String
-  receivableInstallment    ReceivableInstallment @relation(fields: [receivableInstallmentId], references: [id], onDelete: Cascade)
-
-  procedureId              String?
-  percentageApplied        Decimal  @db.Decimal(5, 2)
-  amount                   Decimal  @db.Decimal(10, 2)
-
-  createdAt                DateTime @default(now())
+  id                      String                @id @default(cuid())
+  organizationId          String
+  professionalUserId      String
+  receivableInstallmentId String
+  procedureId             String?
+  percentageApplied       Decimal               @db.Decimal(5, 2)
+  amount                  Decimal               @db.Decimal(10, 2)
+  createdAt               DateTime              @default(now())
+  receivableInstallment   ReceivableInstallment @relation(fields: [receivableInstallmentId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
   @@index([professionalUserId])
   @@map("commission_entries")
 }
 
-// ------------------------------------------------------------
-// ------------------------------------------------------------
-// AGENDA — Fase 4
-// ------------------------------------------------------------
-
 model ClinicalResource {
-  id             String   @id @default(cuid())
+  id             String        @id @default(cuid())
   organizationId String
-
-  name           String   // ex: "Cadeira 1", "Sala 2"
-  type           String   @default("cadeira") // sala | cadeira
-  active         Boolean  @default(true)
-
-  createdAt      DateTime @default(now())
-
+  name           String
+  type           String        @default("cadeira")
+  active         Boolean       @default(true)
+  createdAt      DateTime      @default(now())
   appointments   Appointment[]
 
   @@index([organizationId])
@@ -474,31 +338,21 @@ model ClinicalResource {
 }
 
 model Appointment {
-  id                 String   @id @default(cuid())
+  id                 String            @id @default(cuid())
   organizationId     String
-
   patientId          String
-  patient            Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
-
-  professionalUserId String   // dentista responsável pela consulta
-
+  professionalUserId String
   resourceId         String?
-  resource           ClinicalResource? @relation(fields: [resourceId], references: [id])
-
   procedureId        String?
-  procedure          Procedure? @relation(fields: [procedureId], references: [id])
-
   startsAt           DateTime
-  durationMinutes    Int      @default(30)
-
-  status             String   @default("agendada")
-  // agendada | confirmada | em_atendimento | concluida | cancelada | faltou
-
+  durationMinutes    Int               @default(30)
+  status             String            @default("agendada")
   notes              String?
-
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
-
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  patient            Patient           @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  procedure          Procedure?        @relation(fields: [procedureId], references: [id])
+  resource           ClinicalResource? @relation(fields: [resourceId], references: [id])
   receivable         Receivable?
 
   @@index([organizationId])
@@ -507,25 +361,18 @@ model Appointment {
   @@map("appointments")
 }
 
-// ------------------------------------------------------------
-// AUDITORIA
-// ------------------------------------------------------------
-
 model AuditLog {
-  id             String   @id @default(cuid())
+  id             String       @id @default(cuid())
   organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-
   userId         String?
-  user           User?    @relation(fields: [userId], references: [id])
-
-  action         String   // ex: "patient.create", "record.update"
+  action         String
   entityType     String
   entityId       String
   before         Json?
   after          Json?
-
-  createdAt      DateTime @default(now())
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User?        @relation(fields: [userId], references: [id])
 
   @@index([organizationId, entityType, entityId])
   @@map("audit_logs")
