@@ -1,24 +1,21 @@
 import { BRAND_NAME } from "@/lib/brand";
 
-// Ícone de dente estilizado (SVG próprio, sem depender de biblioteca de
-// ícones — o lucide-react não tem um ícone de dente).
+// Símbolo oficial da marca Klivo (imagem única, com transparência),
+// centralizado aqui e reaproveitado em todos os componentes que exibem
+// a marca — login, sidebar, telas internas e impressões. Mantém o mesmo
+// nome/assinatura (`ToothIcon`) do ícone SVG anterior para não exigir
+// mudanças nos locais que já o utilizam.
 export function ToothIcon({ size = 28, className = "" }: { size?: number; className?: string }) {
   return (
-    <svg
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src="/brand/klivo-tooth.png"
+      alt="Klivo"
       width={size}
       height={size}
-      viewBox="0 0 24 24"
-      fill="none"
       className={className}
-      aria-hidden="true"
-    >
-      <path
-        d="M12 2.5c-2.5 0-4.5 1.7-4.5 4.3 0 1.6.7 2.4.9 4 .3 2.2-.4 3.9-.4 5.8 0 1.4.7 2.4 1.7 2.4.9 0 1.1-1.5 1.4-2.8.2-1 .5-1.7.9-1.7s.7.7.9 1.7c.3 1.3.5 2.8 1.4 2.8 1 0 1.7-1 1.7-2.4 0-1.9-.7-3.6-.4-5.8.2-1.6.9-2.4.9-4 0-2.6-2-4.3-4.5-4.3z"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinejoin="round"
-      />
-    </svg>
+      style={{ width: size, height: size, objectFit: "contain", flexShrink: 0 }}
+    />
   );
 }
 
