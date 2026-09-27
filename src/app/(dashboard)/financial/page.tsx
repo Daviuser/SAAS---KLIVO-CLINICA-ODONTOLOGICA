@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { Plus } from "lucide-react";
 
 type Receivable = {
@@ -34,7 +35,9 @@ function formatCurrency(value: string | number) {
 }
 
 export default function FinancialPage() {
-  const [tab, setTab] = useState<"receivables" | "payables">("receivables");
+  const searchParams = useSearchParams();
+  const initialTab = searchParams.get("tab") === "payables" ? "payables" : "receivables";
+  const [tab, setTab] = useState<"receivables" | "payables">(initialTab);
   const [receivables, setReceivables] = useState<Receivable[]>([]);
   const [payables, setPayables] = useState<Payable[]>([]);
   const [loading, setLoading] = useState(true);
