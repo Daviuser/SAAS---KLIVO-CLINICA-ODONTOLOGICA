@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
+import { OverdueAppointmentsAlert } from "./OverdueAppointmentsAlert";
 
 export function AppShell({
   clinicName,
@@ -36,6 +37,7 @@ export function AppShell({
         />
         <main className="flex-1 overflow-y-auto">{children}</main>
       </div>
+      <OverdueAppointmentsAlert />
     </div>
   );
 }
