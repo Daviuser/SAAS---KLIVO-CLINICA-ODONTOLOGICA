@@ -19,6 +19,13 @@ import { PERMISSIONS } from "@/lib/permissions";
 
 // `permission: null` = todo usuário autenticado vê (ex: Dashboard).
 // Qualquer outro valor exige que a permissão esteja na lista do usuário.
+//
+// Os rótulos abaixo são os PADRÕES (Administrador, Gestor, Financeiro).
+// Dentista (papel "Profissional") e Recepção (papel "Recepcionista") têm
+// rótulos mais específicos para a mesma rota — ver ROLE_LABEL_OVERRIDES.
+// Isso é só rótulo/copy: a rota é a mesma, e o que decide se o item
+// aparece ou não continua sendo a permissão de verdade, checada no
+// backend em toda API por trás dela — nunca só aqui.
 const NAV_ITEMS = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard, permission: null },
   { label: "Pacientes", href: "/patients", icon: Users, permission: PERMISSIONS.PATIENTS_READ },
@@ -29,13 +36,28 @@ const NAV_ITEMS = [
   { label: "Relatórios", href: "/reports", icon: BarChart3, permission: PERMISSIONS.REPORTS_READ },
 ];
 
+// Só troca o TEXTO exibido para o item de menu daquela rota, por papel.
+// Ex.: Dentista vê "Minha agenda" em vez de "Agenda" no mesmo /agenda —
+// que, no backend, já retorna só a própria agenda pra esse papel.
+const ROLE_LABEL_OVERRIDES: Record<string, Record<string, string>> = {
+  Profissional: {
+    "/agenda": "Minha agenda",
+    "/commissions": "Minhas comissões",
+  },
+  Recepcionista: {
+    "/agenda": "Agenda da clínica",
+  },
+};
+
 export function Sidebar({
   clinicName,
+  roleName,
   permissions,
   mobileOpen = false,
   onClose,
 }: {
   clinicName: string;
+  roleName?: string;
   permissions: string[];
   mobileOpen?: boolean;
   onClose?: () => void;
@@ -48,7 +70,11 @@ export function Sidebar({
   // das seções que existem lá dentro (salas/cadeiras ou usuários).
   const showSettings = has(PERMISSIONS.AGENDA_WRITE) || has(PERMISSIONS.USERS_MANAGE);
 
-  const visibleItems = NAV_ITEMS.filter((item) => has(item.permission));
+  const labelOverrides = (roleName && ROLE_LABEL_OVERRIDES[roleName]) || {};
+  const visibleItems = NAV_ITEMS.filter((item) => has(item.permission)).map((item) => ({
+    ...item,
+    label: labelOverrides[item.href] ?? item.label,
+  }));
 
   const content = (
     <>

@@ -20,6 +20,16 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     return NextResponse.json({ error: "Dados inválidos", details: parsed.error.flatten() }, { status: 400 });
   }
 
+  // Concluir um atendimento é uma ação clínica distinta de agendar/
+  // remarcar/cancelar — exige AGENDA_COMPLETE (Admin e Dentista por
+  // padrão; recepção tem AGENDA_WRITE mas não conclui atendimentos).
+  if (parsed.data.status === "concluida") {
+    const canComplete = await userHasPermission(user.roleId, PERMISSIONS.AGENDA_COMPLETE);
+    if (!canComplete) {
+      return NextResponse.json({ error: "Sem permissão para concluir atendimentos" }, { status: 403 });
+    }
+  }
+
   const appointment = await withTenantContext(user.organizationId, async (tx) => {
     const existing = await tx.appointment.findUnique({
       where: { id: params.id },
@@ -27,6 +37,14 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     });
     if (!existing) return null;
     assertSameOrganization(existing.organizationId, user.organizationId);
+
+    // Um dentista só pode alterar (remarcar, confirmar, concluir,
+    // cancelar) as PRÓPRIAS consultas — nunca as de outro profissional,
+    // mesmo sabendo o id da consulta. Quem pode ver/mexer na agenda de
+    // todo mundo (admin, recepção, gestor) segue sem essa restrição.
+    if (user.roleName === "Profissional" && existing.professionalUserId !== user.id) {
+      throw new Error("FORBIDDEN_CROSS_TENANT_ACCESS");
+    }
 
     const updated = await tx.appointment.update({
       where: { id: params.id },
@@ -152,8 +170,14 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     }
 
     return { ...updated, generatedReceivable: receivable, generatedCommission: commissionEntry };
+  }).catch((e) => {
+    if (e.message === "FORBIDDEN_CROSS_TENANT_ACCESS") return { forbidden: true as const };
+    throw e;
   });
 
   if (!appointment) return NextResponse.json({ error: "Consulta não encontrada" }, { status: 404 });
+  if ("forbidden" in appointment) {
+    return NextResponse.json({ error: "Você só pode alterar as próprias consultas" }, { status: 403 });
+  }
   return NextResponse.json({ appointment });
 }

@@ -23,6 +23,7 @@ export function AppShell({
     <div className="flex min-h-screen">
       <Sidebar
         clinicName={clinicName}
+        roleName={roleName}
         permissions={permissions}
         mobileOpen={mobileOpen}
         onClose={() => setMobileOpen(false)}

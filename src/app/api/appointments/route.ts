@@ -31,9 +31,20 @@ export async function GET(req: Request) {
           return { gte: start, lte: end };
         })();
 
+  // Dentista só enxerga a PRÓPRIA agenda (matriz de permissões: Agenda =
+  // "Própria" pro papel Profissional). Admin, recepção e gestor continuam
+  // vendo a agenda inteira da clínica. Isso é reforçado aqui no backend —
+  // não importa o que o frontend pediu, um dentista nunca recebe consulta
+  // de outro profissional nessa resposta.
+  const isDentist = user.roleName === "Profissional";
+
   const appointments = await withTenantContext(user.organizationId, (tx) =>
     tx.appointment.findMany({
-      where: { organizationId: user.organizationId, startsAt },
+      where: {
+        organizationId: user.organizationId,
+        startsAt,
+        ...(isDentist ? { professionalUserId: user.id } : {}),
+      },
       include: {
         patient: { select: { id: true, name: true, phone: true, whatsapp: true } },
         resource: { select: { id: true, name: true } },
@@ -60,6 +71,18 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Dados inválidos", details: parsed.error.flatten() }, { status: 400 });
   }
   const data = parsed.data;
+
+  // Um dentista (papel "Profissional") só pode criar consulta em nome
+  // de SI MESMO — nunca atribuída a outro profissional, mesmo que
+  // envie outro professionalUserId no corpo da requisição. Quem pode
+  // agendar em nome de qualquer profissional (recepção, admin, gestor)
+  // não é afetado por essa checagem.
+  if (user.roleName === "Profissional" && data.professionalUserId !== user.id) {
+    return NextResponse.json(
+      { error: "Você só pode criar consultas em sua própria agenda" },
+      { status: 403 }
+    );
+  }
 
   const result = await withTenantContext(user.organizationId, async (tx) => {
     // Checa conflito de horário — mesmo profissional OU mesma

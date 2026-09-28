@@ -25,6 +25,14 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     return NextResponse.json({ error: "Você não pode desativar sua própria conta" }, { status: 400 });
   }
 
+  // Impede que um usuário altere o PRÓPRIO papel (nunca por essa rota) —
+  // mesmo alguém com users:manage não pode se autopromover (ou se
+  // rebaixar por engano). Mudança de papel de si mesmo tem que ser feita
+  // por outro administrador.
+  if (parsed.data.roleId && params.id === user.id) {
+    return NextResponse.json({ error: "Você não pode alterar o próprio papel" }, { status: 400 });
+  }
+
   const updated = await withTenantContext(user.organizationId, async (tx) => {
     const existing = await tx.user.findUnique({ where: { id: params.id } });
     if (!existing) return null;

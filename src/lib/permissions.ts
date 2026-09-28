@@ -8,6 +8,11 @@ export const PERMISSIONS = {
 
   AGENDA_READ: "agenda:read",
   AGENDA_WRITE: "agenda:write",
+  // Permissão específica para CONCLUIR um atendimento (dispara geração
+  // automática de recebimento + comissão). Separada de AGENDA_WRITE
+  // porque agendar/remarcar/cancelar é uma coisa (recepção também faz),
+  // concluir um atendimento clínico é outra (só quem atendeu ou admin).
+  AGENDA_COMPLETE: "agenda:complete",
 
   RECORDS_READ: "records:read",
   RECORDS_WRITE: "records:write",
@@ -59,6 +64,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, PermissionKey[]> = {
     PERMISSIONS.PATIENTS_READ,
     PERMISSIONS.AGENDA_READ,
     PERMISSIONS.AGENDA_WRITE,
+    PERMISSIONS.AGENDA_COMPLETE,
     PERMISSIONS.RECORDS_READ,
     PERMISSIONS.RECORDS_WRITE,
     PERMISSIONS.ODONTOGRAM_READ,
