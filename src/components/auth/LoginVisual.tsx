@@ -1,8 +1,8 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { CalendarDays, FileText, TrendingUp, ShieldCheck } from "lucide-react";
-import { Logo, ToothIcon } from "@/components/brand/Logo";
+import { CalendarDays, FileText, Stethoscope, ShieldCheck } from "lucide-react";
+import { Logo } from "@/components/brand/Logo";
 
 // Painel visual do login. Usa a foto da clínica fornecida, com uma
 // camada de overlay nas cores da marca para manter o texto branco
@@ -10,8 +10,8 @@ import { Logo, ToothIcon } from "@/components/brand/Logo";
 const FEATURES = [
   { icon: CalendarDays, label: "Agendamento\ninteligente" },
   { icon: FileText, label: "Prontuário\ndigital" },
-  { icon: ToothIcon, label: "Odontograma\ncompleto" },
-  { icon: TrendingUp, label: "Financeiro\nsimplificado" },
+  { icon: Stethoscope, label: "Atendimento\nmedico" },
+  { icon: ShieldCheck, label: "Cuidado\nhumanizado" },
 ];
 
 export function LoginVisual() {
@@ -38,7 +38,7 @@ export function LoginVisual() {
       <div
         className="absolute inset-0 bg-cover bg-center transition-transform duration-700 ease-out"
         style={{
-          backgroundImage: "url(/login-clinic.png)",
+          backgroundImage: "url(/caf-vida-santaluz-clinica.jpeg)",
           transform: `scale(1.05) translate(${offset.x * -8}px, ${offset.y * -8}px)`,
         }}
       />
@@ -66,7 +66,7 @@ export function LoginVisual() {
       {/* Conteúdo */}
       <div className="relative h-full flex flex-col justify-between p-10 lg:p-12 text-white">
         <div className="animate-fade-in-up">
-          <Logo size={56} light />
+          <Logo size={56} light showTagline={false} />
         </div>
 
         <div className="animate-fade-in-up [animation-delay:100ms]">
@@ -79,8 +79,7 @@ export function LoginVisual() {
             <span className="text-primary-light">consultório.</span>
           </h1>
           <p className="text-white/55 text-sm mt-5 max-w-sm leading-relaxed">
-            Agenda, prontuário, odontograma e financeiro da sua clínica em um
-            único lugar.
+            Agenda, prontuario e gestao medica para apoiar o cuidado da sua clinica.
           </p>
 
           <div className="grid grid-cols-4 gap-3 mt-9 max-w-md">

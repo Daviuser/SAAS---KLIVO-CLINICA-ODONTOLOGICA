@@ -1,7 +1,7 @@
 import Link from "next/link";
 import {
   CalendarClock,
-  Hourglass,
+  Users,
   CalendarCheck2,
   Clock3,
   CalendarX2,
@@ -44,10 +44,13 @@ export async function ReceptionDashboard({ user }: { user: any }) {
   const now = new Date();
   const dayStart = new Date(now); dayStart.setHours(0, 0, 0, 0);
   const dayEnd = new Date(now); dayEnd.setHours(23, 59, 59, 999);
+  const upcomingEnd = new Date(now); upcomingEnd.setDate(upcomingEnd.getDate() + 7);
 
   const data = await withTenantContext(user.organizationId, async (tx) => {
     const [
       appointmentsToday,
+      patientsCount,
+      completedTodayCount,
       waitingCount,
       confirmedTodayCount,
       pendingConfirmationCount,
@@ -57,6 +60,8 @@ export async function ReceptionDashboard({ user }: { user: any }) {
       tx.appointment.count({
         where: { organizationId: user.organizationId, startsAt: { gte: dayStart, lte: dayEnd } },
       }),
+      tx.patient.count({ where: { organizationId: user.organizationId } }),
+      tx.appointment.count({ where: { organizationId: user.organizationId, status: "concluida" } }),
       tx.appointment.count({
         where: {
           organizationId: user.organizationId,
@@ -80,7 +85,7 @@ export async function ReceptionDashboard({ user }: { user: any }) {
       tx.appointment.findMany({
         where: {
           organizationId: user.organizationId,
-          startsAt: { gte: now, lte: dayEnd },
+          startsAt: { gte: now, lte: upcomingEnd },
           status: { notIn: ["cancelada", "faltou"] },
         },
         orderBy: { startsAt: "asc" },
@@ -100,6 +105,8 @@ export async function ReceptionDashboard({ user }: { user: any }) {
 
     return {
       appointmentsToday,
+      patientsCount,
+      completedTodayCount,
       waitingCount,
       confirmedTodayCount,
       pendingConfirmationCount,
@@ -113,10 +120,8 @@ export async function ReceptionDashboard({ user }: { user: any }) {
 
   const metrics = [
     { label: "Consultas hoje", value: String(data.appointmentsToday), icon: CalendarClock },
-    { label: "Aguardando atendimento", value: String(data.waitingCount), icon: Hourglass },
-    { label: "Confirmadas", value: String(data.confirmedTodayCount), icon: CalendarCheck2 },
-    { label: "Pendentes de confirmação", value: String(data.pendingConfirmationCount), icon: Clock3 },
-    { label: "Cancelamentos e faltas hoje", value: String(data.cancelledOrNoShowTodayCount), icon: CalendarX2 },
+    { label: "Pacientes cadastrados", value: String(data.patientsCount), icon: Users },
+    { label: "Consultas realizadas", value: String(data.completedTodayCount), icon: CalendarCheck2 },
   ];
 
   return (

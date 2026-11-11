@@ -17,7 +17,7 @@ export default function ForgotPasswordPage() {
 
         <div className="w-full max-w-sm bg-white border border-border rounded-lg shadow-[0_1px_3px_rgba(20,35,31,0.06),0_8px_24px_rgba(20,35,31,0.06)] p-8 relative animate-fade-in-up">
           <div className="flex justify-center mb-7">
-            <Logo size={40} />
+            <Logo size={40} showTagline={false} />
           </div>
 
           <h1 className="font-display text-2xl text-ink mb-1 text-center" style={{ fontWeight: 700 }}>

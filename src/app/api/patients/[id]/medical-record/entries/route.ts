@@ -71,7 +71,9 @@ export async function POST(
         action: "record_entry.create",
         entityType: "RecordEntry",
         entityId: entry.id,
-        after: entry as any,
+        // AuditLog.after is a JSON column. Normalize Date values (such as
+        // createdAt) to ISO strings before sending the snapshot to Prisma.
+        after: JSON.parse(JSON.stringify(entry)),
       },
     });
 

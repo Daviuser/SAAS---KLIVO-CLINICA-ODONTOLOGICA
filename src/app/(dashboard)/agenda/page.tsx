@@ -404,10 +404,6 @@ function AppointmentDetail({
         </div>
 
         <div className="space-y-1.5 text-sm text-ink-muted mb-4">
-          <p>
-            <span className="text-ink-muted/70">Procedimento: </span>
-            <span className="text-ink">{appt.procedure?.name ?? "Não definido"}</span>
-          </p>
           {appt.resource && (
             <p>
               <span className="text-ink-muted/70">Sala/cadeira: </span>
@@ -474,7 +470,7 @@ function NewAppointmentForm({
 
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [resources, setResources] = useState<Resource[]>([]);
-  const [procedures, setProcedures] = useState<Procedure[]>([]);
+
 
   const [formDate, setFormDate] = useState(() => formatDateISO(date));
   const [form, setForm] = useState({
@@ -508,7 +504,7 @@ function NewAppointmentForm({
   useEffect(() => {
     fetch("/api/professionals").then((r) => r.ok && r.json()).then((d) => d && setProfessionals(d.professionals));
     fetch("/api/clinical-resources").then((r) => r.ok && r.json()).then((d) => d && setResources(d.resources));
-    fetch("/api/procedures").then((r) => r.ok && r.json()).then((d) => d && setProcedures(d.procedures));
+
   }, []);
 
   useEffect(() => {
@@ -700,21 +696,7 @@ function NewAppointmentForm({
         </div>
 
         <div>
-          <label className="block text-xs text-ink-muted mb-1">Procedimento (opcional)</label>
-          <select
-            value={form.procedureId}
-            onChange={(e) => setForm((f) => ({ ...f, procedureId: e.target.value }))}
-            className="w-full rounded border border-border px-2 py-2 text-sm"
-          >
-            <option value="">Nenhum</option>
-            {procedures.map((p) => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-xs text-ink-muted mb-1">Observações</label>
+          <label className="block text-xs text-ink-muted mb-1">Observa??es</label>
           <textarea
             value={form.notes}
             onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}

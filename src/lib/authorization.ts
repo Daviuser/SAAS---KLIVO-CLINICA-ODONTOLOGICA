@@ -8,6 +8,7 @@ import { PermissionKey } from "@/lib/permissions";
 // DEFAULT_ROLE_PERMISSIONS, em src/lib/permissions.ts).
 // ============================================================
 const PERMISSION_CHECKS_ENABLED = true;
+const HIDDEN_MODULE_PERMISSIONS = new Set<PermissionKey>(["procedures:read", "procedures:write", "budgets:read", "budgets:write", "odontogram:read", "odontogram:write", "financial:read", "financial:write", "commissions:read", "commissions:write", "reports:read"]);
 
 /**
  * Verifica se um usuário (via roleId) possui uma permissão específica.
@@ -18,6 +19,7 @@ export async function userHasPermission(
   roleId: string,
   permissionKey: PermissionKey
 ): Promise<boolean> {
+  if (HIDDEN_MODULE_PERMISSIONS.has(permissionKey)) return false;
   if (!PERMISSION_CHECKS_ENABLED) return true;
 
   const rolePermission = await prisma.rolePermission.findFirst({

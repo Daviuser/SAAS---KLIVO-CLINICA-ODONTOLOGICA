@@ -17,12 +17,11 @@ export default function SettingsPage() {
       .then((data) => {
         const perms: string[] = data.permissions ?? [];
         setPermissions(perms);
-        if (perms.includes("agenda:write")) setTab("resources");
-        else if (perms.includes("users:manage")) setTab("users");
+        if (perms.includes("users:manage")) setTab("users");
       });
   }, []);
 
-  const canSeeResources = permissions?.includes("agenda:write") ?? false;
+  const canSeeResources = false;
   const canSeeUsers = permissions?.includes("users:manage") ?? false;
 
   if (permissions && !canSeeResources && !canSeeUsers) {

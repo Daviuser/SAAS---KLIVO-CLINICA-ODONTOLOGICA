@@ -1,18 +1,11 @@
 import type { Metadata } from "next";
-import { Montserrat } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "./providers";
 import { BRAND_NAME } from "@/lib/brand";
 
-const montserrat = Montserrat({
-  subsets: ["latin"],
-  variable: "--font-montserrat",
-  weight: ["400", "500", "600", "700"],
-});
-
 export const metadata: Metadata = {
-  title: `${BRAND_NAME} — Gestão de Clínicas Odontológicas`,
-  description: "Plataforma de gestão para clínicas odontológicas",
+  title: `${BRAND_NAME} | Gestao de Clinicas Medicas`,
+  description: "Plataforma de gestao para clinicas medicas"
 };
 
 export default function RootLayout({
@@ -21,7 +14,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="pt-BR" className={montserrat.variable}>
+    <html lang="pt-BR" style={{ "--font-montserrat": "Arial" } as React.CSSProperties}>
       <body>
         <AuthProvider>{children}</AuthProvider>
       </body>

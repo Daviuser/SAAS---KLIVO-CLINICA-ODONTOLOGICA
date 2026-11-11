@@ -17,8 +17,6 @@ export function PatientTabs({
   const tabs = [
     { label: "Dados pessoais", href: `/patients/${patientId}`, visible: true },
     { label: "Prontuário", href: `/patients/${patientId}/prontuario`, visible: has(PERMISSIONS.RECORDS_READ) },
-    { label: "Odontograma", href: `/patients/${patientId}/odontograma`, visible: has(PERMISSIONS.ODONTOGRAM_READ) },
-    { label: "Orçamentos", href: `/patients/${patientId}/orcamentos`, visible: has(PERMISSIONS.BUDGETS_READ) },
   ].filter((tab) => tab.visible);
 
   return (

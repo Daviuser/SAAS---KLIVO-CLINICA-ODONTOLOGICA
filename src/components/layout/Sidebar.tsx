@@ -6,16 +6,15 @@ import {
   LayoutDashboard,
   Users,
   CalendarDays,
-  Wallet,
+  FileText,
   ClipboardList,
-  BarChart3,
-  PiggyBank,
-  Settings,
+  Users as UsersIcon,
   X,
 } from "lucide-react";
 import { ToothIcon } from "@/components/brand/Logo";
 import { BRAND_NAME } from "@/lib/brand";
 import { PERMISSIONS } from "@/lib/permissions";
+import { CLINIC_UI } from "@/lib/clinic-ui";
 
 // `permission: null` = todo usuário autenticado vê (ex: Dashboard).
 // Qualquer outro valor exige que a permissão esteja na lista do usuário.
@@ -30,10 +29,8 @@ const NAV_ITEMS = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard, permission: null },
   { label: "Pacientes", href: "/patients", icon: Users, permission: PERMISSIONS.PATIENTS_READ },
   { label: "Agenda", href: "/agenda", icon: CalendarDays, permission: PERMISSIONS.AGENDA_READ },
-  { label: "Procedimentos", href: "/procedures", icon: ClipboardList, permission: PERMISSIONS.PROCEDURES_READ },
-  { label: "Financeiro", href: "/financial", icon: Wallet, permission: PERMISSIONS.FINANCIAL_READ },
-  { label: "Comissões", href: "/commissions", icon: PiggyBank, permission: PERMISSIONS.COMMISSIONS_READ },
-  { label: "Relatórios", href: "/reports", icon: BarChart3, permission: PERMISSIONS.REPORTS_READ },
+  { label: "Consultas", href: "/consultas", icon: ClipboardList, permission: PERMISSIONS.RECORDS_READ },
+  { label: "Atestados", href: "/atestados", icon: FileText, permission: PERMISSIONS.PATIENTS_READ },
 ];
 
 // Só troca o TEXTO exibido para o item de menu daquela rota, por papel.
@@ -68,10 +65,10 @@ export function Sidebar({
 
   // Configurações só aparece se o usuário tiver acesso a pelo menos uma
   // das seções que existem lá dentro (salas/cadeiras ou usuários).
-  const showSettings = has(PERMISSIONS.AGENDA_WRITE) || has(PERMISSIONS.USERS_MANAGE);
+  const showSettings = has(PERMISSIONS.USERS_MANAGE);
 
   const labelOverrides = (roleName && ROLE_LABEL_OVERRIDES[roleName]) || {};
-  const visibleItems = NAV_ITEMS.filter((item) => has(item.permission)).map((item) => ({
+  const visibleItems = NAV_ITEMS.filter((item) => CLINIC_UI.enabledModules.includes(item.href.slice(1) as never) && has(item.permission)).map((item) => ({
     ...item,
     label: labelOverrides[item.href] ?? item.label,
   }));
@@ -129,8 +126,8 @@ export function Sidebar({
                 : "border-transparent text-white/60 hover:text-white hover:bg-white/5"
             }`}
           >
-            <Settings size={17} strokeWidth={1.75} />
-            Configurações
+            <UsersIcon size={17} strokeWidth={1.75} />
+            Usu&#xE1;rios
           </Link>
         </div>
       )}
