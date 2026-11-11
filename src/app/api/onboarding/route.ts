@@ -28,6 +28,9 @@ export async function POST(req: Request) {
   }
 
   const { clinicName, adminName, adminEmail, adminPassword } = parsed.data;
+  // Password hashing is intentionally outside the DB transaction so CPU work
+  // does not consume the database transaction timeout.
+  const passwordHash = await bcrypt.hash(adminPassword, 10);
 
   // Cria tudo dentro de uma transação: clínica, unidade padrão,
   // permissões, papéis padrão e o usuário Admin.
@@ -78,8 +81,6 @@ export async function POST(req: Request) {
       if (roleName === "Administrador") adminRoleId = role.id;
     }
 
-    const passwordHash = await bcrypt.hash(adminPassword, 10);
-
     const adminUser = await tx.user.create({
       data: {
         organizationId: organization.id,
@@ -91,6 +92,9 @@ export async function POST(req: Request) {
     });
 
       return { organization, adminUser };
+    }, {
+      maxWait: 10_000,
+      timeout: 30_000,
     });
   } catch (error) {
     const code = (error as { code?: string })?.code;
