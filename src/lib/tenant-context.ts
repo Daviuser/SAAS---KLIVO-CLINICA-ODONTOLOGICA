@@ -24,5 +24,8 @@ export async function withTenantContext<T>(
     // com connection pooling, não vaza para outras requisições.
     await tx.$executeRaw`SELECT set_config('app.current_org_id', ${organizationId}, true)`;
     return callback(tx);
+  }, {
+    maxWait: 10_000,
+    timeout: 30_000,
   });
 }
