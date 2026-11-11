@@ -5,14 +5,19 @@ import { prisma } from "@/lib/prisma";
 import { DEFAULT_ROLE_PERMISSIONS } from "@/lib/permissions";
 
 const onboardingSchema = z.object({
-  clinicName: z.string().min(2),
-  adminName: z.string().min(2),
-  adminEmail: z.string().email(),
+  clinicName: z.string().trim().min(2),
+  adminName: z.string().trim().min(2),
+  adminEmail: z.string().trim().email().transform((email) => email.toLowerCase()),
   adminPassword: z.string().min(8),
 });
 
 export async function POST(req: Request) {
-  const body = await req.json();
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Dados do cadastro inválidos." }, { status: 400 });
+  }
   const parsed = onboardingSchema.safeParse(body);
 
   if (!parsed.success) {
@@ -26,7 +31,9 @@ export async function POST(req: Request) {
 
   // Cria tudo dentro de uma transação: clínica, unidade padrão,
   // permissões, papéis padrão e o usuário Admin.
-  const result = await prisma.$transaction(async (tx) => {
+  let result;
+  try {
+    result = await prisma.$transaction(async (tx) => {
     const organization = await tx.organization.create({
       data: {
         name: clinicName,
@@ -83,8 +90,16 @@ export async function POST(req: Request) {
       },
     });
 
-    return { organization, adminUser };
-  });
+      return { organization, adminUser };
+    });
+  } catch (error) {
+    const code = (error as { code?: string })?.code;
+    console.error("Onboarding transaction failed", code ?? "UNKNOWN");
+    return NextResponse.json(
+      { error: "Não foi possível concluir o cadastro da clínica. Confira se o banco está disponível e tente novamente." },
+      { status: 500 }
+    );
+  }
 
   return NextResponse.json({
     success: true,

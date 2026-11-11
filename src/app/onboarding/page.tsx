@@ -27,26 +27,42 @@ export default function OnboardingPage() {
     setLoading(true);
     setError(null);
 
-    const res = await fetch("/api/onboarding", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
-    });
-
-    if (!res.ok) {
+    try {
+      const res = await fetch("/api/onboarding", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...form,
+          clinicName: form.clinicName.trim(),
+          adminName: form.adminName.trim(),
+          adminEmail: form.adminEmail.trim().toLowerCase(),
+        }),
+      });
       const data = await res.json().catch(() => ({}));
-      setError(data.error ?? "Erro ao criar a clínica.");
+
+      if (!res.ok) {
+        setError(data.error ?? "N\u00e3o foi poss\u00edvel cadastrar a cl\u00ednica. Tente novamente.");
+        setLoading(false);
+        return;
+      }
+
+      const login = await signIn("credentials", {
+        email: form.adminEmail.trim().toLowerCase(),
+        password: form.adminPassword,
+        redirect: false,
+      });
+
+      if (!login || login.error) {
+        setError("A cl\u00ednica foi cadastrada, mas o acesso autom\u00e1tico falhou. Entre pela tela de login com o e-mail e a senha informados.");
+        setLoading(false);
+        return;
+      }
+
+      router.push("/dashboard");
+    } catch {
+      setError("N\u00e3o foi poss\u00edvel conectar ao servidor. Verifique a conex\u00e3o e tente novamente.");
       setLoading(false);
-      return;
     }
-
-    await signIn("credentials", {
-      email: form.adminEmail,
-      password: form.adminPassword,
-      redirect: false,
-    });
-
-    router.push("/dashboard");
   }
 
   return (
